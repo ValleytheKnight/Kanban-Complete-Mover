@@ -1,11 +1,16 @@
-import { App, PluginSettingTab, Setting } from 'obsidian';
+import { App, moment, PluginSettingTab, Setting } from 'obsidian';
 import type KanbanCompleteMoverPlugin from './main';
+
+export type TimeOption = 'none' | 'hour' | 'minutes' | 'seconds';
 
 export interface KanbanCompleteMoverSettings {
 	enabled: boolean;
 	targetLaneName: string;
 	dateStampEnabled: boolean;
-	dateFormat: string;
+	datePreset: string;
+	timeOption: TimeOption;
+	clock24: boolean;
+	customFormat: string;
 	excludedPaths: string[];
 }
 
@@ -13,9 +18,38 @@ export const DEFAULT_SETTINGS: KanbanCompleteMoverSettings = {
 	enabled: false,
 	targetLaneName: 'Complete',
 	dateStampEnabled: false,
-	dateFormat: 'YYYY-MM-DD',
+	datePreset: 'YYYY-MM-DD',
+	timeOption: 'none',
+	clock24: false,
+	customFormat: 'YYYY-MM-DD',
 	excludedPaths: [],
 };
+
+const DATE_PRESETS = [
+	'YYYY-MM-DD',
+	'MM/DD/YYYY',
+	'DD/MM/YYYY',
+	'DD.MM.YYYY',
+	'MMM D, YYYY',
+	'D MMM YYYY',
+	'dddd, MMMM D, YYYY',
+];
+
+const TIME_TOKENS: Record<'12' | '24', Record<Exclude<TimeOption, 'none'>, string>> = {
+	'24': { hour: 'HH', minutes: 'HH:mm', seconds: 'HH:mm:ss' },
+	'12': { hour: 'h A', minutes: 'h:mm A', seconds: 'h:mm:ss A' },
+};
+
+export function composeDateStampFormat(settings: KanbanCompleteMoverSettings): string {
+	if (settings.datePreset === 'custom') {
+		return settings.customFormat;
+	}
+	if (settings.timeOption === 'none') {
+		return settings.datePreset;
+	}
+	const clock = settings.clock24 ? '24' : '12';
+	return `${settings.datePreset} ${TIME_TOKENS[clock][settings.timeOption]}`;
+}
 
 export class KanbanCompleteMoverSettingTab extends PluginSettingTab {
 	plugin: KanbanCompleteMoverPlugin;
@@ -61,28 +95,90 @@ export class KanbanCompleteMoverSettingTab extends PluginSettingTab {
 
 		new Setting(containerEl)
 			.setName('Add completion date')
-			.setDesc('Append the date to a card when it moves to the complete lane.')
+			.setDesc('Append a stamp to a card when it moves to the complete lane.')
 			.addToggle((toggle) =>
 				toggle
 					.setValue(this.plugin.settings.dateStampEnabled)
 					.onChange(async (value) => {
 						this.plugin.settings.dateStampEnabled = value;
 						await this.plugin.saveSettings();
+						this.display();
 					}),
 			);
 
-		new Setting(containerEl)
-			.setName('Date format')
-			.setDesc('Moment format string for the completion date.')
-			.addText((text) =>
-				text
-					.setValue(this.plugin.settings.dateFormat)
-					.onChange(async (value) => {
-						this.plugin.settings.dateFormat =
-							value.trim() || DEFAULT_SETTINGS.dateFormat;
-						await this.plugin.saveSettings();
-					}),
-			);
+		if (this.plugin.settings.dateStampEnabled) {
+			new Setting(containerEl)
+				.setName('Date format')
+				.setDesc('How the date part of the stamp is written.')
+				.addDropdown((dropdown) => {
+					for (const preset of DATE_PRESETS) {
+						dropdown.addOption(preset, moment().format(preset));
+					}
+					dropdown.addOption('custom', 'Custom');
+					dropdown
+						.setValue(this.plugin.settings.datePreset)
+						.onChange(async (value) => {
+							this.plugin.settings.datePreset = value;
+							await this.plugin.saveSettings();
+							this.display();
+						});
+				});
+
+			if (this.plugin.settings.datePreset === 'custom') {
+				new Setting(containerEl)
+					.setName('Custom format')
+					.setDesc(
+						'Moment format string. Include time tokens here if you want them, the time options below are skipped for custom formats.',
+					)
+					.addText((text) =>
+						text
+							.setValue(this.plugin.settings.customFormat)
+							.onChange(async (value) => {
+								this.plugin.settings.customFormat =
+									value.trim() || DEFAULT_SETTINGS.customFormat;
+								await this.plugin.saveSettings();
+								this.updatePreview();
+							}),
+					);
+			} else {
+				new Setting(containerEl)
+					.setName('Time stamp')
+					.setDesc('How much of the time to include after the date.')
+					.addDropdown((dropdown) =>
+						dropdown
+							.addOption('none', 'None')
+							.addOption('hour', 'Hour')
+							.addOption('minutes', 'Hour and minutes')
+							.addOption('seconds', 'Hour, minutes, and seconds')
+							.setValue(this.plugin.settings.timeOption)
+							.onChange(async (value) => {
+								this.plugin.settings.timeOption = value as TimeOption;
+								await this.plugin.saveSettings();
+								this.display();
+							}),
+					);
+
+				if (this.plugin.settings.timeOption !== 'none') {
+					new Setting(containerEl)
+						.setName('Use 24-hour clock')
+						.setDesc('Off means 12-hour time with am and pm.')
+						.addToggle((toggle) =>
+							toggle
+								.setValue(this.plugin.settings.clock24)
+								.onChange(async (value) => {
+									this.plugin.settings.clock24 = value;
+									await this.plugin.saveSettings();
+									this.updatePreview();
+								}),
+						);
+				}
+			}
+
+			new Setting(containerEl)
+				.setName('Stamp preview')
+				.setDesc(this.previewText())
+				.setClass('kanban-complete-mover-preview');
+		}
 
 		new Setting(containerEl)
 			.setName('Excluded boards')
@@ -99,5 +195,18 @@ export class KanbanCompleteMoverSettingTab extends PluginSettingTab {
 						await this.plugin.saveSettings();
 					}),
 			);
+	}
+
+	private previewText(): string {
+		return `✅ ${moment().format(composeDateStampFormat(this.plugin.settings))}`;
+	}
+
+	private updatePreview(): void {
+		const preview = this.containerEl.querySelector(
+			'.kanban-complete-mover-preview .setting-item-description',
+		);
+		if (preview) {
+			preview.textContent = this.previewText();
+		}
 	}
 }
