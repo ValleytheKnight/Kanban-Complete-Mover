@@ -95,30 +95,22 @@ export function parseBoard(content: string): ParsedBoard {
 }
 
 /**
- * Card keys whose checked-instance count rose between the two snapshots.
- * Count-based so that duplicate card texts move one instance per new check
- * instead of every copy.
+ * Every checked card currently sitting outside the target lane, counted by
+ * key so duplicate card texts each get their own move. Reading this fresh
+ * from the current file, instead of diffing against a remembered snapshot,
+ * makes the plugin self-healing: if the Kanban view's own save overwrites a
+ * move in flight, the next modify event sees the same misplaced card and
+ * moves it again, instead of depending on a precisely timed diff.
  */
-export function newlyCheckedKeys(before: string, after: string): Map<string, number> {
-	const countChecked = (content: string): Map<string, number> => {
-		const counts = new Map<string, number>();
-		for (const card of parseBoard(content).cards) {
-			if (card.checked) {
-				counts.set(card.key, (counts.get(card.key) ?? 0) + 1);
-			}
-		}
-		return counts;
-	};
-
-	const beforeCounts = countChecked(before);
-	const result = new Map<string, number>();
-	for (const [key, afterCount] of countChecked(after)) {
-		const delta = afterCount - (beforeCounts.get(key) ?? 0);
-		if (delta > 0) {
-			result.set(key, delta);
+export function checkedOutsideLane(content: string, targetLane: string): Map<string, number> {
+	const targetLower = targetLane.trim().toLowerCase();
+	const counts = new Map<string, number>();
+	for (const card of parseBoard(content).cards) {
+		if (card.checked && card.laneTitle.toLowerCase() !== targetLower) {
+			counts.set(card.key, (counts.get(card.key) ?? 0) + 1);
 		}
 	}
-	return result;
+	return counts;
 }
 
 export interface MoveResult {

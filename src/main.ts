@@ -1,6 +1,7 @@
 import { moment, normalizePath, Plugin, TFile } from 'obsidian';
-import { moveCheckedCards, newlyCheckedKeys } from './board';
+import { checkedOutsideLane, moveCheckedCards } from './board';
 import {
+	composeDateStampFormat,
 	DEFAULT_SETTINGS,
 	KanbanCompleteMoverSettings,
 	KanbanCompleteMoverSettingTab,
@@ -8,15 +9,14 @@ import {
 
 const BOARD_FRONTMATTER_KEY = 'kanban-plugin';
 const LANE_OVERRIDE_KEY = 'kanban-complete-lane';
-const DEBOUNCE_MS = 250;
-const SELF_WRITE_CLEAR_MS = 500;
+const SCAN_DELAY_MS = 30;
 
 export default class KanbanCompleteMoverPlugin extends Plugin {
 	settings!: KanbanCompleteMoverSettings;
 
-	private snapshots = new Map<string, string>();
+	private lastSeen = new Map<string, string>();
 	private pendingScans = new Map<string, number>();
-	private selfWrites = new Set<string>();
+	private inFlight = new Set<string>();
 
 	async onload() {
 		await this.loadSettings();
@@ -32,25 +32,19 @@ export default class KanbanCompleteMoverPlugin extends Plugin {
 
 		this.registerEvent(
 			this.app.vault.on('rename', (file, oldPath) => {
-				if (file instanceof TFile) {
-					const snapshot = this.snapshots.get(oldPath);
-					this.snapshots.delete(oldPath);
-					if (snapshot !== undefined) {
-						this.snapshots.set(file.path, snapshot);
-					}
+				const snapshot = this.lastSeen.get(oldPath);
+				this.lastSeen.delete(oldPath);
+				if (file instanceof TFile && snapshot !== undefined) {
+					this.lastSeen.set(file.path, snapshot);
 				}
 			}),
 		);
 
 		this.registerEvent(
 			this.app.vault.on('delete', (file) => {
-				this.snapshots.delete(file.path);
+				this.lastSeen.delete(file.path);
 			}),
 		);
-
-		this.app.workspace.onLayoutReady(() => {
-			void this.warmSnapshots();
-		});
 	}
 
 	onunload() {
@@ -94,17 +88,8 @@ export default class KanbanCompleteMoverPlugin extends Plugin {
 		return this.settings.targetLaneName;
 	}
 
-	private async warmSnapshots() {
-		for (const file of this.app.vault.getMarkdownFiles()) {
-			if (this.isBoard(file)) {
-				this.snapshots.set(file.path, await this.app.vault.cachedRead(file));
-			}
-		}
-	}
-
 	private queueScan(file: TFile) {
 		if (!this.settings.enabled) return;
-		if (this.selfWrites.has(file.path)) return;
 		if (!this.isBoard(file) || this.isExcluded(file)) return;
 
 		const existing = this.pendingScans.get(file.path);
@@ -116,54 +101,60 @@ export default class KanbanCompleteMoverPlugin extends Plugin {
 			window.setTimeout(() => {
 				this.pendingScans.delete(file.path);
 				void this.processBoard(file);
-			}, DEBOUNCE_MS),
+			}, SCAN_DELAY_MS),
 		);
 	}
 
 	private async processBoard(file: TFile) {
-		const current = await this.app.vault.cachedRead(file);
-		const previous = this.snapshots.get(file.path);
-
-		if (previous === undefined || previous === current) {
-			this.snapshots.set(file.path, current);
+		if (this.inFlight.has(file.path)) {
+			// Another scan is already writing this file; it will re-scan its
+			// own result when that write lands, so this pass can skip.
 			return;
 		}
 
-		const moveBudget = newlyCheckedKeys(previous, current);
-		if (moveBudget.size === 0) {
-			this.snapshots.set(file.path, current);
+		const current = await this.app.vault.cachedRead(file);
+		if (this.lastSeen.get(file.path) === current) {
 			return;
 		}
 
 		const targetLane = this.targetLaneFor(file);
+		const budget = checkedOutsideLane(current, targetLane);
+		if (budget.size === 0) {
+			this.lastSeen.set(file.path, current);
+			return;
+		}
+
 		const dateStamp = this.settings.dateStampEnabled
-			? `✅ ${moment().format(this.settings.dateFormat)}`
+			? `✅ ${moment().format(composeDateStampFormat(this.settings))}`
 			: null;
 
-		this.selfWrites.add(file.path);
+		this.inFlight.add(file.path);
 		try {
 			const result = await this.app.vault.process(file, (data) => {
-				const move = moveCheckedCards(data, moveBudget, targetLane, dateStamp);
+				const move = moveCheckedCards(data, budget, targetLane, dateStamp);
 				return move.content;
 			});
-			this.snapshots.set(file.path, result);
+			this.lastSeen.set(file.path, result);
 			this.refreshBoardViews(file);
 		} finally {
-			window.setTimeout(() => {
-				this.selfWrites.delete(file.path);
-			}, SELF_WRITE_CLEAR_MS);
+			this.inFlight.delete(file.path);
 		}
+
+		// The write above triggers another modify event; that rescan is what
+		// catches a checked card the Kanban view re-adds after this pass, so
+		// nothing further is scheduled from here.
 	}
 
 	/**
-	 * An open board view keeps its own in-memory copy and its next internal
-	 * save would overwrite an external edit, so force it to reload from disk.
+	 * An open board view keeps its own in-memory copy, so force it to reload
+	 * from disk after an external write instead of waiting for the user to
+	 * close and reopen the file.
 	 */
 	private refreshBoardViews(file: TFile) {
 		for (const leaf of this.app.workspace.getLeavesOfType('kanban')) {
 			const view = leaf.view as { file?: TFile; load?: () => void };
 			if (view.file?.path === file.path && typeof view.load === 'function') {
-				window.setTimeout(() => view.load?.(), 100);
+				view.load();
 			}
 		}
 	}
