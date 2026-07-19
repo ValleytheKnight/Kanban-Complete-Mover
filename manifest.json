@@ -1,0 +1,10 @@
+{
+	"id": "kanban-complete-mover",
+	"name": "Kanban Complete Mover",
+	"version": "0.1.0",
+	"minAppVersion": "1.1.0",
+	"description": "Move a Kanban card to your Complete lane the moment its checkbox is checked, with an optional completion-date stamp.",
+	"author": "Chris Brown",
+	"authorUrl": "https://github.com/chrisairbrown-del",
+	"isDesktopOnly": false
+}
