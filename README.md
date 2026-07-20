@@ -33,7 +33,7 @@ Check any card, anywhere on the board, and it moves to your Complete lane. This 
 
 ### The Complete lane creates itself
 
-If a board doesn't have a Complete lane yet, checking a card creates one -- positioned above an Archive section if the board has one, at the very bottom otherwise.
+Checking a card on a board with no Complete lane creates one automatically. It lands above an Archive section if the board has one, otherwise at the very bottom.
 
 <!-- CLIP: lane-auto-create. A board with no Complete lane, a card gets checked, a new Complete lane appears and the card lands in it. -->
 
@@ -48,7 +48,7 @@ kanban-complete-lane: Shipped
 ---
 ```
 
-Now checking a card on that board sends it to a lane called "Shipped" instead -- created automatically with that exact name if it doesn't exist yet, same as the default lane would be.
+Checking a card on that board now sends it to a lane called "Shipped" instead. If that lane doesn't exist yet, it's created automatically, exactly like the default lane would be.
 
 <!-- SCREENSHOT: frontmatter-override. The YAML frontmatter block above, actually visible in a real note, next to the board showing a "Shipped" lane instead of "Complete." -->
 
@@ -72,7 +72,7 @@ Off by default. Turn on "Add completion date" to append a timestamp to a card th
 
 ### Adopting an existing vault safely
 
-If you already have checked cards scattered around your vault from before this plugin existed, turning the automatic toggle on will **not** sweep through and move them all right away -- only boards you actually touch afterward get processed. When you're ready to bring your whole vault up to date deliberately, run **Kanban Complete Mover: Scan vault now** from the command palette. It processes every board at once and reports how many cards moved, restored, or unchecked.
+Already have checked cards scattered around your vault from before this plugin existed? Turning the automatic toggle on will **not** sweep through and move them all right away. Only boards you actually touch afterward get processed. When you're ready to bring your whole vault up to date deliberately, run **Kanban Complete Mover: Scan vault now** from the command palette. It processes every board at once and reports how many cards moved, restored, or unchecked.
 
 <!-- SCREENSHOT: scan-vault-now-notice. The command palette with "Scan vault now" highlighted, or the resulting Notice popup showing the summary counts. -->
 
@@ -105,12 +105,19 @@ Right-click any board in the file explorer and choose **Exclude board from Kanba
 
 - Archived cards (the base Kanban plugin's own Archive section) are never touched, moved, or scanned.
 - Multi-line cards move as a whole block, continuation lines included.
-- Duplicate cards with identical text are tracked individually -- checking one doesn't move the other.
+- Duplicate cards with identical text are tracked individually. Checking one doesn't move the other.
 - This plugin only edits plain Markdown checkboxes and lane headings. It doesn't touch anything outside the boards it's watching.
+
+## Known limitations and compatibility notes
+
+- **Undo does not apply to automatic moves.** This plugin writes to your board files outside Obsidian's own editor history, so Ctrl+Z (or Cmd+Z) has no record of a move it made and won't reverse one. That's normal for this category of plugin: Obsidian gives plugins no way to register their own writes on the undo stack, so none of them integrate with it.
+- **Checking several cards in very fast succession can occasionally leave one behind, just once.** Under rapid-fire clicking, the underlying Kanban plugin can save its own view state at almost the same moment this plugin writes a move. Very rarely, the two land in an order that leaves a single card stuck. Checking and unchecking that card again resolves it immediately. The fix depends on a new file change to re-trigger a check, and there's no way to guarantee ordering against another plugin's own save cycle without hooking into its internals, which this plugin deliberately avoids for stability.
+- **Manually dragging an unchecked card into your Complete lane does not check it off or add a stamp.** This plugin only reacts to a checkbox being checked. It never reacts to a card simply arriving in a lane. Want a card to auto-check itself on arrival instead? That's a different, already-existing feature: the base Kanban plugin's own per-lane "Mark cards in this list as complete" toggle. Turn that on for your Complete lane and the two plugins compose cleanly. Kanban checks the card off, and this plugin sees it's already exactly where it belongs and leaves it alone.
+- **Restore on uncheck only works for cards this plugin itself moved.** A card that reached Complete some other way (a manual drag, or the native Kanban toggle above) was never given a recorded origin lane, so there's nothing to send it back to. Checking and unchecking a card like that in place does nothing, by design.
 
 ## Contributing
 
-Issues and pull requests are welcome. This plugin has no external dependencies and no network calls -- it reads and writes local Markdown files only.
+Issues and pull requests are welcome. This plugin has no external dependencies and makes no network calls. It reads and writes local Markdown files, nothing else.
 
 ## License
 
