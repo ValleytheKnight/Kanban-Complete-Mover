@@ -72,6 +72,58 @@ export default class KanbanCompleteMoverPlugin extends Plugin {
 				});
 			},
 		});
+
+		this.addCommand({
+			id: 'toggle-exclude-current-board',
+			name: 'Exclude or include this board',
+			checkCallback: (checking) => {
+				const file = this.app.workspace.getActiveFile();
+				if (!file || !this.isBoard(file)) return false;
+				if (!checking) {
+					void this.toggleExcluded(file);
+				}
+				return true;
+			},
+		});
+
+		// The most direct path for someone who doesn't know what a vault
+		// path even is: right-click the board itself, no typing required.
+		this.registerEvent(
+			this.app.workspace.on('file-menu', (menu, file) => {
+				if (!(file instanceof TFile) || !this.isBoard(file)) return;
+				const excluded = this.isExcluded(file);
+				menu.addItem((item) =>
+					item
+						.setTitle(
+							excluded
+								? 'Include board in Kanban Complete Mover'
+								: 'Exclude board from Kanban Complete Mover',
+						)
+						.setIcon(excluded ? 'check-circle' : 'circle-slash')
+						.onClick(() => {
+							void this.toggleExcluded(file);
+						}),
+				);
+			}),
+		);
+	}
+
+	private async toggleExcluded(file: TFile) {
+		const path = normalizePath(file.path);
+		const wasExcluded = this.isExcluded(file);
+		if (wasExcluded) {
+			this.settings.excludedPaths = this.settings.excludedPaths.filter(
+				(excluded) => normalizePath(excluded) !== path,
+			);
+		} else {
+			this.settings.excludedPaths.push(file.path);
+		}
+		await this.saveSettings();
+		new Notice(
+			wasExcluded
+				? `Kanban Complete Mover: "${file.basename}" is included again.`
+				: `Kanban Complete Mover: "${file.basename}" is now excluded.`,
+		);
 	}
 
 	onunload() {

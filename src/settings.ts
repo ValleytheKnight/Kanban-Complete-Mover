@@ -198,7 +198,9 @@ export class KanbanCompleteMoverSettingTab extends PluginSettingTab {
 
 		new Setting(containerEl)
 			.setName('Excluded boards')
-			.setDesc('Vault paths of boards this plugin should never touch, one per line.')
+			.setDesc(
+				'The easiest way to exclude a board: right-click it in the file explorer and choose "Exclude board from Kanban Complete Mover" (or open the board and run that same command from the command palette). No path typing needed. The list below is what that action edits, shown here for reference or for removing entries by hand.',
+			)
 			.addTextArea((text) =>
 				text
 					.setPlaceholder('Projects/Some Board.md')
