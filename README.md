@@ -107,6 +107,7 @@ Right-click any board in the file explorer and choose **Exclude board from Kanba
 - Multi-line cards move as a whole block, continuation lines included.
 - Duplicate cards with identical text are tracked individually. Checking one doesn't move the other.
 - This plugin only edits plain Markdown checkboxes and lane headings. It doesn't touch anything outside the boards it's watching.
+- Finding your Kanban boards means listing every file path in your vault (that's how "Scan vault now" and "Scan this board" work). The plugin only reads file paths and the Markdown content of actual boards, nothing else, and nothing ever leaves your vault: no network calls, no telemetry.
 
 ## Known limitations and compatibility notes
 
