@@ -9,7 +9,10 @@ import {
 
 const BOARD_FRONTMATTER_KEY = 'kanban-plugin';
 const LANE_OVERRIDE_KEY = 'kanban-complete-lane';
-const SCAN_DELAY_MS = 30;
+
+// A same-tick delay, not a deliberate wait: coalesces multiple modify
+// events that land for one edit without adding any perceived lag.
+const SCAN_DELAY_MS = 0;
 
 export default class KanbanCompleteMoverPlugin extends Plugin {
 	settings!: KanbanCompleteMoverSettings;
