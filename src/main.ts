@@ -4,6 +4,7 @@ import {
 	cleanStaleMarkers,
 	moveCheckedCards,
 	restoreUncheckedCards,
+	stripStampInLane,
 	uncheckDraggedOutCards,
 } from './board';
 import {
@@ -291,6 +292,14 @@ export default class KanbanCompleteMoverPlugin extends Plugin {
 					const restore = restoreUncheckedCards(working, targetLane);
 					working = restore.content;
 					restored = restore.restoredCount;
+				} else {
+					// With restore-on-uncheck off, restoreUncheckedCards never
+					// runs, so a card unchecked while still sitting in the
+					// target lane would otherwise keep a stale stamp forever.
+					// This strips it in place without moving the card.
+					const stripped = stripStampInLane(working, targetLane);
+					working = stripped.content;
+					unchecked += stripped.uncheckedCount;
 				}
 
 				return working;

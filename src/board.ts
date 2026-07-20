@@ -219,6 +219,40 @@ export function cleanStaleMarkers(content: string, targetLane: string): UncheckR
 	return { content: lines.join('\n'), uncheckedCount: candidates.length };
 }
 
+/**
+ * A card that is unchecked, carries a marker, and sits inside the target
+ * lane would normally be handled by restoreUncheckedCards, but that only
+ * runs when the restore-on-uncheck setting is on. With it off, a card
+ * unchecked in place while still sitting in the complete lane had no
+ * handler at all: checkedOutsideLane and uncheckDraggedOutCards both key
+ * off being outside the lane, restoreUncheckedCards keys off the setting,
+ * and cleanStaleMarkers above deliberately excludes cards still inside the
+ * lane since restoreUncheckedCards owns that case. This strips the stale
+ * stamp and marker in place, with no move, so the card doesn't keep
+ * showing a completion stamp it no longer earns just because the setting
+ * that would relocate it happens to be off.
+ */
+export function stripStampInLane(content: string, targetLane: string): UncheckResult {
+	const targetLower = targetLane.trim().toLowerCase();
+	const board = parseBoard(content);
+	const candidates = board.cards.filter(
+		(card) =>
+			!card.checked &&
+			card.laneTitle.toLowerCase() === targetLower &&
+			ORIGIN_MARKER.test(card.key),
+	);
+	if (candidates.length === 0) {
+		return { content, uncheckedCount: 0 };
+	}
+
+	const lines = content.split('\n');
+	for (const card of candidates) {
+		const original = lines[card.startLine] ?? '';
+		lines[card.startLine] = original.replace(STAMP_AND_MARKER, '');
+	}
+	return { content: lines.join('\n'), uncheckedCount: candidates.length };
+}
+
 function findLaneLine(lines: string[], laneNameLower: string): number {
 	for (let i = 0; i < lines.length; i++) {
 		const line = lines[i] ?? '';
