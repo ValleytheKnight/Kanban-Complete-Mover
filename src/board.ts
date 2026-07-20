@@ -114,22 +114,67 @@ export function parseBoard(content: string): ParsedBoard {
 }
 
 /**
- * Every checked card currently sitting outside the target lane, counted by
- * key so duplicate card texts each get their own move. Reading this fresh
- * from the current file, instead of diffing against a remembered snapshot,
- * makes the plugin self-healing: if the Kanban view's own save overwrites a
- * move in flight, the next modify event sees the same misplaced card and
- * moves it again, instead of depending on a precisely timed diff.
+ * Every checked card currently sitting outside the target lane that has
+ * never been through the complete lane before (no origin marker), counted
+ * by key so duplicate card texts each get their own move. A card that does
+ * carry the marker was dragged out manually after already being moved once;
+ * see uncheckDraggedOutCards for that case, handled separately so a manual
+ * drag isn't fought by bouncing the card straight back.
+ *
+ * Reading this fresh from the current file, instead of diffing against a
+ * remembered snapshot, makes the plugin self-healing: if the Kanban view's
+ * own save overwrites a move in flight, the next modify event sees the same
+ * misplaced card and moves it again, instead of depending on a precisely
+ * timed diff.
  */
 export function checkedOutsideLane(content: string, targetLane: string): Map<string, number> {
 	const targetLower = targetLane.trim().toLowerCase();
 	const counts = new Map<string, number>();
 	for (const card of parseBoard(content).cards) {
-		if (card.checked && card.laneTitle.toLowerCase() !== targetLower) {
+		if (
+			card.checked &&
+			card.laneTitle.toLowerCase() !== targetLower &&
+			!ORIGIN_MARKER.test(card.key)
+		) {
 			counts.set(card.key, (counts.get(card.key) ?? 0) + 1);
 		}
 	}
 	return counts;
+}
+
+export interface UncheckResult {
+	content: string;
+	uncheckedCount: number;
+}
+
+/**
+ * A card carrying the origin marker (meaning it was previously moved into
+ * the complete lane by this plugin) that is now checked but sitting outside
+ * that lane was dragged there manually, not freshly checked. It gets
+ * unchecked and stripped of its marker right where it is, instead of being
+ * bounced back to the complete lane or sent to its recorded origin lane
+ * either. A manual drag is a deliberate placement; the checkbox should
+ * follow it, not fight it.
+ */
+export function uncheckDraggedOutCards(content: string, targetLane: string): UncheckResult {
+	const targetLower = targetLane.trim().toLowerCase();
+	const board = parseBoard(content);
+	const candidates = board.cards.filter(
+		(card) =>
+			card.checked &&
+			card.laneTitle.toLowerCase() !== targetLower &&
+			ORIGIN_MARKER.test(card.key),
+	);
+	if (candidates.length === 0) {
+		return { content, uncheckedCount: 0 };
+	}
+
+	const lines = content.split('\n');
+	for (const card of candidates) {
+		const original = lines[card.startLine] ?? '';
+		lines[card.startLine] = uncheckLine(original.replace(ORIGIN_MARKER, ''));
+	}
+	return { content: lines.join('\n'), uncheckedCount: candidates.length };
 }
 
 function findLaneLine(lines: string[], laneNameLower: string): number {
@@ -184,16 +229,18 @@ export interface MoveResult {
 /**
  * Move checked cards named in moveBudget into the target lane, creating the
  * lane when missing. Returns the original content untouched when there is
- * nothing to do. When attachOriginMarker is set, each moved card's original
- * lane and raw text are recorded in a hidden comment so restoreUncheckedCards
- * can send it back if it's later unchecked.
+ * nothing to do. Every moved card's original lane and raw text are always
+ * recorded in a hidden comment, both so restoreUncheckedCards can send it
+ * back if it's later unchecked while still in the target lane (when that
+ * setting is on), and so uncheckDraggedOutCards can recognize it if it's
+ * dragged out manually while still checked (unconditional, not tied to any
+ * setting, since a manual drag should never be fought either way).
  */
 export function moveCheckedCards(
 	content: string,
 	moveBudget: Map<string, number>,
 	targetLane: string,
 	dateStamp: string | null,
-	attachOriginMarker: boolean,
 ): MoveResult {
 	const board = parseBoard(content);
 	const lines = content.split('\n');
@@ -222,10 +269,8 @@ export function moveCheckedCards(
 		if (dateStamp) {
 			firstLine = `${firstLine} ${dateStamp}`;
 		}
-		if (attachOriginMarker) {
-			const encoded = encodeOriginalLine(originalRawLine);
-			firstLine = `${firstLine} <!--kcm-from:${card.laneTitle}|${encoded}-->`;
-		}
+		const encoded = encodeOriginalLine(originalRawLine);
+		firstLine = `${firstLine} <!--kcm-from:${card.laneTitle}|${encoded}-->`;
 		block[0] = firstLine;
 		movedBlocks.push(block);
 	}

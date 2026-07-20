@@ -1,5 +1,10 @@
 import { moment, normalizePath, Notice, Plugin, TFile } from 'obsidian';
-import { checkedOutsideLane, moveCheckedCards, restoreUncheckedCards } from './board';
+import {
+	checkedOutsideLane,
+	moveCheckedCards,
+	restoreUncheckedCards,
+	uncheckDraggedOutCards,
+} from './board';
 import {
 	composeDateStampFormat,
 	DEFAULT_SETTINGS,
@@ -17,6 +22,7 @@ const SCAN_DELAY_MS = 0;
 interface ProcessResult {
 	moved: number;
 	restored: number;
+	unchecked: number;
 }
 
 export default class KanbanCompleteMoverPlugin extends Plugin {
@@ -58,9 +64,9 @@ export default class KanbanCompleteMoverPlugin extends Plugin {
 			id: 'scan-vault-now',
 			name: 'Scan vault now',
 			callback: () => {
-				void this.scanVault().then(({ files, moved, restored }) => {
+				void this.scanVault().then(({ files, moved, restored, unchecked }) => {
 					new Notice(
-						`Kanban Complete Mover: checked ${files} board file(s). Moved ${moved} card(s), restored ${restored} card(s).`,
+						`Kanban Complete Mover: checked ${files} board file(s). Moved ${moved}, restored ${restored}, unchecked ${unchecked}.`,
 					);
 				});
 			},
@@ -132,19 +138,31 @@ export default class KanbanCompleteMoverPlugin extends Plugin {
 	 * leaking out board by board on whatever unrelated edit touches each
 	 * file next.
 	 */
-	private async scanVault(): Promise<{ files: number; moved: number; restored: number }> {
+	private async scanVault(): Promise<{
+		files: number;
+		moved: number;
+		restored: number;
+		unchecked: number;
+	}> {
 		const files = this.app.vault
 			.getMarkdownFiles()
 			.filter((file) => this.isBoard(file) && !this.isExcluded(file));
 
 		let totalMoved = 0;
 		let totalRestored = 0;
+		let totalUnchecked = 0;
 		for (const file of files) {
 			const result = await this.processBoard(file);
 			totalMoved += result?.moved ?? 0;
 			totalRestored += result?.restored ?? 0;
+			totalUnchecked += result?.unchecked ?? 0;
 		}
-		return { files: files.length, moved: totalMoved, restored: totalRestored };
+		return {
+			files: files.length,
+			moved: totalMoved,
+			restored: totalRestored,
+			unchecked: totalUnchecked,
+		};
 	}
 
 	private async processBoard(file: TFile): Promise<ProcessResult | null> {
@@ -156,7 +174,7 @@ export default class KanbanCompleteMoverPlugin extends Plugin {
 
 		const current = await this.app.vault.cachedRead(file);
 		if (this.lastSeen.get(file.path) === current) {
-			return { moved: 0, restored: 0 };
+			return { moved: 0, restored: 0, unchecked: 0 };
 		}
 
 		const targetLane = this.targetLaneFor(file);
@@ -167,21 +185,25 @@ export default class KanbanCompleteMoverPlugin extends Plugin {
 
 		let moved = 0;
 		let restored = 0;
+		let unchecked = 0;
 
 		this.inFlight.add(file.path);
 		try {
 			const result = await this.app.vault.process(file, (data) => {
 				let working = data;
 
+				// A card carrying our marker but sitting outside the target
+				// lane while still checked was dragged out manually. Handle
+				// that before the fresh-check scan below, since a marked card
+				// is deliberately excluded from that scan and must not be
+				// left checked in its new lane.
+				const draggedOut = uncheckDraggedOutCards(working, targetLane);
+				working = draggedOut.content;
+				unchecked = draggedOut.uncheckedCount;
+
 				const moveBudget = checkedOutsideLane(working, targetLane);
 				if (moveBudget.size > 0) {
-					const move = moveCheckedCards(
-						working,
-						moveBudget,
-						targetLane,
-						dateStamp,
-						restoreEnabled,
-					);
+					const move = moveCheckedCards(working, moveBudget, targetLane, dateStamp);
 					working = move.content;
 					moved = move.movedCount;
 				}
@@ -195,14 +217,14 @@ export default class KanbanCompleteMoverPlugin extends Plugin {
 				return working;
 			});
 			this.lastSeen.set(file.path, result);
-			if (moved > 0 || restored > 0) {
+			if (moved > 0 || restored > 0 || unchecked > 0) {
 				this.refreshBoardViews(file);
 			}
 		} finally {
 			this.inFlight.delete(file.path);
 		}
 
-		return { moved, restored };
+		return { moved, restored, unchecked };
 	}
 
 	/**
