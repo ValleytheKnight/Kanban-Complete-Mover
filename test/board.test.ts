@@ -14,7 +14,7 @@ function board(lines: string[]): string {
 	return lines.join('\n');
 }
 
-test('parseBoard reads cards, checked state, and lane assignment', () => {
+void test('parseBoard reads cards, checked state, and lane assignment', () => {
 	const content = board([
 		'## Backlog',
 		'- [ ] First task',
@@ -31,7 +31,7 @@ test('parseBoard reads cards, checked state, and lane assignment', () => {
 	assert.equal(parsed.cards[2]?.laneTitle, 'Complete');
 });
 
-test('parseBoard joins multi-line card continuations into one key', () => {
+void test('parseBoard joins multi-line card continuations into one key', () => {
 	const content = board([
 		'## Backlog',
 		'- [ ] First line',
@@ -45,7 +45,7 @@ test('parseBoard joins multi-line card continuations into one key', () => {
 	assert.equal(parsed.cards[0]?.lineCount, 3);
 });
 
-test('parseBoard stops at the Archive heading', () => {
+void test('parseBoard stops at the Archive heading', () => {
 	const content = board([
 		'## Backlog',
 		'- [ ] Active card',
@@ -57,7 +57,7 @@ test('parseBoard stops at the Archive heading', () => {
 	assert.equal(parsed.archiveLine, 2);
 });
 
-test('parseBoard stops at the kanban settings block', () => {
+void test('parseBoard stops at the kanban settings block', () => {
 	const content = board([
 		'## Backlog',
 		'- [ ] Active card',
@@ -70,7 +70,7 @@ test('parseBoard stops at the kanban settings block', () => {
 	assert.equal(parsed.settingsLine, 2);
 });
 
-test('checkedOutsideLane counts duplicate card text separately', () => {
+void test('checkedOutsideLane counts duplicate card text separately', () => {
 	const content = board([
 		'## Backlog',
 		'- [x] Reply to client emails',
@@ -82,19 +82,19 @@ test('checkedOutsideLane counts duplicate card text separately', () => {
 	assert.equal(counts.get('Reply to client emails'), 2);
 });
 
-test('checkedOutsideLane ignores a card already inside the target lane', () => {
+void test('checkedOutsideLane ignores a card already inside the target lane', () => {
 	const content = board(['## Complete', '- [x] Already done']);
 	const counts = checkedOutsideLane(content, 'Complete');
 	assert.equal(counts.size, 0);
 });
 
-test('checkedOutsideLane matches the target lane case-insensitively', () => {
+void test('checkedOutsideLane matches the target lane case-insensitively', () => {
 	const content = board(['## complete', '- [x] Already done', '## Backlog']);
 	const counts = checkedOutsideLane(content, 'Complete');
 	assert.equal(counts.size, 0);
 });
 
-test('checkedOutsideLane skips a card that already carries an origin marker', () => {
+void test('checkedOutsideLane skips a card that already carries an origin marker', () => {
 	const content = board([
 		'## Backlog',
 		'- [x] Reply to client emails <!--kcm-from:Complete|dGVzdA==-->',
@@ -103,7 +103,7 @@ test('checkedOutsideLane skips a card that already carries an origin marker', ()
 	assert.equal(counts.size, 0);
 });
 
-test('moveCheckedCards moves a card into an existing target lane with a stamp and marker', () => {
+void test('moveCheckedCards moves a card into an existing target lane with a stamp and marker', () => {
 	const content = board(['## Backlog', '- [x] Buy groceries', '## Complete', '']);
 	const budget = checkedOutsideLane(content, 'Complete');
 	const result = moveCheckedCards(content, budget, 'Complete', '✅ 2026-07-20');
@@ -112,7 +112,7 @@ test('moveCheckedCards moves a card into an existing target lane with a stamp an
 	assert.match(result.content, /## Complete\n- \[x\] Buy groceries ✅ 2026-07-20 <!--kcm-from:Backlog\|/);
 });
 
-test('moveCheckedCards creates the target lane above Archive when missing', () => {
+void test('moveCheckedCards creates the target lane above Archive when missing', () => {
 	const content = board(['## Ideas', '- [x] Ship the thing', '## Archive', '- [x] Old']);
 	const budget = checkedOutsideLane(content, 'Complete');
 	const result = moveCheckedCards(content, budget, 'Complete', null);
@@ -123,7 +123,7 @@ test('moveCheckedCards creates the target lane above Archive when missing', () =
 	assert.deepEqual(laneOrder, ['Ideas', 'Complete', 'Archive']);
 });
 
-test('moveCheckedCards creates the target lane at the bottom when there is no Archive', () => {
+void test('moveCheckedCards creates the target lane at the bottom when there is no Archive', () => {
 	const content = board(['## Ideas', '- [x] Ship the thing']);
 	const budget = checkedOutsideLane(content, 'Complete');
 	const result = moveCheckedCards(content, budget, 'Complete', null);
@@ -134,7 +134,7 @@ test('moveCheckedCards creates the target lane at the bottom when there is no Ar
 	assert.deepEqual(laneOrder, ['Ideas', 'Complete']);
 });
 
-test('moveCheckedCards moves a multi-line card as one block, continuation lines included', () => {
+void test('moveCheckedCards moves a multi-line card as one block, continuation lines included', () => {
 	const content = board([
 		'## Backlog',
 		'- [x] First line',
@@ -151,7 +151,7 @@ test('moveCheckedCards moves a multi-line card as one block, continuation lines 
 	assert.ok(moved?.key.endsWith('\n\t  Second line'));
 });
 
-test('moveCheckedCards only moves as many duplicates as the budget allows', () => {
+void test('moveCheckedCards only moves as many duplicates as the budget allows', () => {
 	const content = board([
 		'## Backlog',
 		'- [x] Reply to client emails',
@@ -167,7 +167,7 @@ test('moveCheckedCards only moves as many duplicates as the budget allows', () =
 	assert.equal(backlogCard?.checked, false);
 });
 
-test('moveCheckedCards never layers a second marker onto a card that already carries one', () => {
+void test('moveCheckedCards never layers a second marker onto a card that already carries one', () => {
 	const content = board([
 		'## Backlog',
 		'- [x] Ship the thing <!--kcm-from:OldLane|c3RhbGU=-->',
@@ -183,7 +183,7 @@ test('moveCheckedCards never layers a second marker onto a card that already car
 	assert.equal(markerCount, 1);
 });
 
-test('restoreUncheckedCards sends an unchecked card back to its recorded origin lane', () => {
+void test('restoreUncheckedCards sends an unchecked card back to its recorded origin lane', () => {
 	const content = board(['## Backlog', '- [x] Buy groceries', '## Complete', '']);
 	const budget = checkedOutsideLane(content, 'Complete');
 	const moved = moveCheckedCards(content, budget, 'Complete', null);
@@ -200,7 +200,7 @@ test('restoreUncheckedCards sends an unchecked card back to its recorded origin 
 	assert.ok(!restored.content.includes('kcm-from'));
 });
 
-test('restoreUncheckedCards finds the marker on a multi-line card (regression: missing /m flag)', () => {
+void test('restoreUncheckedCards finds the marker on a multi-line card (regression: missing /m flag)', () => {
 	// This is the exact shape that broke before the origin-marker regex
 	// gained the /m flag: a multi-line card's key joins lines with \n, so the
 	// marker sits at the end of line 1, not at the end of the whole key.
@@ -227,7 +227,7 @@ test('restoreUncheckedCards finds the marker on a multi-line card (regression: m
 	assert.equal(backlogCard?.key, 'First line\n\t  Second line');
 });
 
-test('restoreUncheckedCards leaves a card in place, stripped, if its origin lane no longer exists', () => {
+void test('restoreUncheckedCards leaves a card in place, stripped, if its origin lane no longer exists', () => {
 	const content = board(['## Backlog', '- [x] Buy groceries', '## Complete', '']);
 	const budget = checkedOutsideLane(content, 'Complete');
 	const moved = moveCheckedCards(content, budget, 'Complete', null);
@@ -246,7 +246,7 @@ test('restoreUncheckedCards leaves a card in place, stripped, if its origin lane
 	assert.equal(parsed.cards[0]?.key, 'Buy groceries');
 });
 
-test('uncheckDraggedOutCards unchecks and fully cleans a marked card dragged outside the target lane', () => {
+void test('uncheckDraggedOutCards unchecks and fully cleans a marked card dragged outside the target lane', () => {
 	const content = board([
 		'## Complete',
 		'- [x] Buy groceries ✅ 2026-07-20 <!--kcm-from:Backlog|QnV5IGdyb2Nlcmllcw==-->',
@@ -273,7 +273,7 @@ test('uncheckDraggedOutCards unchecks and fully cleans a marked card dragged out
 	assert.equal(card?.checked, false);
 });
 
-test('cleanStaleMarkers strips leftover stamp and marker from an unchecked card outside the target lane', () => {
+void test('cleanStaleMarkers strips leftover stamp and marker from an unchecked card outside the target lane', () => {
 	const content = board([
 		'## Somewhere Else',
 		'- [ ] Buy groceries ✅ 2026-07-20 <!--kcm-from:Backlog|QnV5IGdyb2Nlcmllcw==-->',
@@ -284,7 +284,7 @@ test('cleanStaleMarkers strips leftover stamp and marker from an unchecked card 
 	assert.ok(!result.content.includes('✅'));
 });
 
-test('stripStampInLane strips a stale stamp from a card unchecked in place inside the target lane', () => {
+void test('stripStampInLane strips a stale stamp from a card unchecked in place inside the target lane', () => {
 	// Regression: with restoreOnUncheck off, none of the other functions key
 	// off "unchecked, marked, and still inside the target lane" -- the card
 	// was left stuck with a stamp it no longer earned.
