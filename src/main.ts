@@ -75,6 +75,19 @@ export default class KanbanCompleteMoverPlugin extends Plugin {
 		});
 
 		this.addCommand({
+			id: 'scan-current-board',
+			name: 'Scan this board',
+			checkCallback: (checking) => {
+				const file = this.app.workspace.getActiveFile();
+				if (!file || !this.isBoard(file)) return false;
+				if (!checking) {
+					void this.scanCurrentBoard(file);
+				}
+				return true;
+			},
+		});
+
+		this.addCommand({
 			id: 'toggle-exclude-current-board',
 			name: 'Exclude or include this board',
 			checkCallback: (checking) => {
@@ -106,6 +119,28 @@ export default class KanbanCompleteMoverPlugin extends Plugin {
 						}),
 				);
 			}),
+		);
+	}
+
+	/**
+	 * The single-board counterpart to scanVault: lets someone adopt one
+	 * board at a time and see the result before moving to the next, instead
+	 * of committing the whole vault to one sweep.
+	 */
+	private async scanCurrentBoard(file: TFile): Promise<void> {
+		if (this.isExcluded(file)) {
+			new Notice(
+				`Kanban Complete Mover: "${file.basename}" is excluded. Right-click it and choose "Include board" first.`,
+			);
+			return;
+		}
+
+		const result = await this.processBoard(file);
+		const moved = result?.moved ?? 0;
+		const restored = result?.restored ?? 0;
+		const unchecked = result?.unchecked ?? 0;
+		new Notice(
+			`Kanban Complete Mover: scanned "${file.basename}". Moved ${moved}, restored ${restored}, unchecked ${unchecked}.`,
 		);
 	}
 

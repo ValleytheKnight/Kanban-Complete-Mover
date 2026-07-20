@@ -76,6 +76,8 @@ Already have checked cards scattered around your vault from before this plugin e
 
 <!-- SCREENSHOT: scan-vault-now-notice. The command palette with "Scan vault now" highlighted, or the resulting Notice popup showing the summary counts. -->
 
+Would rather adopt one board at a time and check the result before moving to the next? Open that board and run **Kanban Complete Mover: Scan this board** instead. Same idea, just scoped to whichever board is currently active. A board you've excluded stays untouched either way, running this command on one just tells you it's excluded rather than scanning it.
+
 ### Excluding a board
 
 Right-click any board in the file explorer and choose **Exclude board from Kanban Complete Mover**. That board is now completely ignored, no matter what gets checked on it. Right-click again to bring it back with **Include board**. The same action is available as a command (**Exclude or include this board**) when the board is the active file. No path typing, no settings-file editing required.
