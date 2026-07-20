@@ -1,6 +1,7 @@
 import { moment, normalizePath, Notice, Plugin, TFile } from 'obsidian';
 import {
 	checkedOutsideLane,
+	cleanStaleMarkers,
 	moveCheckedCards,
 	restoreUncheckedCards,
 	uncheckDraggedOutCards,
@@ -117,7 +118,10 @@ export default class KanbanCompleteMoverPlugin extends Plugin {
 	private queueScan(file: TFile) {
 		if (!this.settings.enabled) return;
 		if (!this.isBoard(file) || this.isExcluded(file)) return;
+		this.scheduleScan(file);
+	}
 
+	private scheduleScan(file: TFile) {
 		const existing = this.pendingScans.get(file.path);
 		if (existing !== undefined) {
 			window.clearTimeout(existing);
@@ -126,9 +130,24 @@ export default class KanbanCompleteMoverPlugin extends Plugin {
 			file.path,
 			window.setTimeout(() => {
 				this.pendingScans.delete(file.path);
-				void this.processBoard(file);
+				void this.attemptScan(file);
 			}, SCAN_DELAY_MS),
 		);
+	}
+
+	/**
+	 * processBoard returning null means a write was already in flight for
+	 * this file, and whatever change triggered this scan hasn't been
+	 * accounted for yet. Rescheduling instead of dropping it is what makes
+	 * rapid successive saves converge correctly (a live drag can fire
+	 * several internal Kanban saves in quick succession) instead of
+	 * silently losing whichever change landed mid-write.
+	 */
+	private async attemptScan(file: TFile): Promise<void> {
+		const result = await this.processBoard(file);
+		if (result === null) {
+			this.scheduleScan(file);
+		}
 	}
 
 	/**
@@ -192,6 +211,14 @@ export default class KanbanCompleteMoverPlugin extends Plugin {
 			const result = await this.app.vault.process(file, (data) => {
 				let working = data;
 
+				// An unchecked, marked card sitting outside the target lane
+				// has no move to make but may still carry leftover stamp and
+				// marker text (dragged out by hand after already being
+				// unchecked). Clean that up before anything else runs.
+				const cleaned = cleanStaleMarkers(working, targetLane);
+				working = cleaned.content;
+				unchecked += cleaned.uncheckedCount;
+
 				// A card carrying our marker but sitting outside the target
 				// lane while still checked was dragged out manually. Handle
 				// that before the fresh-check scan below, since a marked card
@@ -199,7 +226,7 @@ export default class KanbanCompleteMoverPlugin extends Plugin {
 				// left checked in its new lane.
 				const draggedOut = uncheckDraggedOutCards(working, targetLane);
 				working = draggedOut.content;
-				unchecked = draggedOut.uncheckedCount;
+				unchecked += draggedOut.uncheckedCount;
 
 				const moveBudget = checkedOutsideLane(working, targetLane);
 				if (moveBudget.size > 0) {

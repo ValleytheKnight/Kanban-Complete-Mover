@@ -19,7 +19,19 @@ export interface ParsedBoard {
 const LANE_HEADING = /^## (.+)$/;
 const CARD_FIRST_LINE = /^- \[( |x|X|\/|-|>)\] ?(.*)$/;
 const CONTINUATION = /^(?: {2}|\t)/;
-const ORIGIN_MARKER = /\s*<!--kcm-from:([^|]*)\|([^>]*)-->\s*$/;
+
+// The m flag is load-bearing: a multi-line card's key joins its lines with
+// \n, and the marker always sits at the end of line 1, not the end of the
+// whole key. Without m, $ only matches the end of the entire string, so a
+// multi-line card's marker was invisible to every function here.
+const ORIGIN_MARKER = /\s*<!--kcm-from:([^|]*)\|([^>]*)-->\s*$/m;
+
+// Matches an optional stamp (always starts with the checkmark this plugin
+// prefixes every stamp with) immediately followed by the marker, so both
+// get removed together. The stamp's own format is user-configurable and
+// unbounded, which is why this can't match the stamp on its own. It only
+// strips a stamp when it directly precedes our marker.
+const STAMP_AND_MARKER = /(?:\s*✅[^\n<]*)?\s*<!--kcm-from:[^|]*\|[^>]*-->\s*$/m;
 
 function encodeOriginalLine(text: string): string {
 	const bytes = new TextEncoder().encode(text);
@@ -151,10 +163,11 @@ export interface UncheckResult {
  * A card carrying the origin marker (meaning it was previously moved into
  * the complete lane by this plugin) that is now checked but sitting outside
  * that lane was dragged there manually, not freshly checked. It gets
- * unchecked and stripped of its marker right where it is, instead of being
- * bounced back to the complete lane or sent to its recorded origin lane
- * either. A manual drag is a deliberate placement; the checkbox should
- * follow it, not fight it.
+ * unchecked and stripped of both its stamp and its marker right where it
+ * is, instead of being bounced back to the complete lane or sent to its
+ * recorded origin lane either. A manual drag is a deliberate placement; the
+ * checkbox should follow it, not fight it, and a card that's no longer
+ * complete shouldn't keep a completion stamp.
  */
 export function uncheckDraggedOutCards(content: string, targetLane: string): UncheckResult {
 	const targetLower = targetLane.trim().toLowerCase();
@@ -172,7 +185,36 @@ export function uncheckDraggedOutCards(content: string, targetLane: string): Unc
 	const lines = content.split('\n');
 	for (const card of candidates) {
 		const original = lines[card.startLine] ?? '';
-		lines[card.startLine] = uncheckLine(original.replace(ORIGIN_MARKER, ''));
+		lines[card.startLine] = uncheckLine(original.replace(STAMP_AND_MARKER, ''));
+	}
+	return { content: lines.join('\n'), uncheckedCount: candidates.length };
+}
+
+/**
+ * A card that is unchecked, carries a marker, and sits outside the target
+ * lane has no move to make (it's already wherever it belongs) but still has
+ * leftover stamp and marker text to clean up. This covers a card dragged
+ * out by hand after already being unchecked, a case none of the other
+ * functions here are watching for since they all key off either being
+ * checked or being inside the target lane.
+ */
+export function cleanStaleMarkers(content: string, targetLane: string): UncheckResult {
+	const targetLower = targetLane.trim().toLowerCase();
+	const board = parseBoard(content);
+	const candidates = board.cards.filter(
+		(card) =>
+			!card.checked &&
+			card.laneTitle.toLowerCase() !== targetLower &&
+			ORIGIN_MARKER.test(card.key),
+	);
+	if (candidates.length === 0) {
+		return { content, uncheckedCount: 0 };
+	}
+
+	const lines = content.split('\n');
+	for (const card of candidates) {
+		const original = lines[card.startLine] ?? '';
+		lines[card.startLine] = original.replace(STAMP_AND_MARKER, '');
 	}
 	return { content: lines.join('\n'), uncheckedCount: candidates.length };
 }
@@ -264,7 +306,12 @@ export function moveCheckedCards(
 	const movedBlocks: string[][] = [];
 	for (const card of toMove) {
 		const block = lines.slice(card.startLine, card.startLine + card.lineCount);
-		const originalRawLine = block[0] ?? '';
+		// Strip any marker this card already carries before treating it as
+		// the pristine original to encode. A card reaching this path should
+		// never already have one (checkedOutsideLane excludes marked cards),
+		// but stripping defensively here means a marker can never layer on
+		// top of itself even if that assumption is ever wrong.
+		const originalRawLine = (block[0] ?? '').replace(STAMP_AND_MARKER, '');
 		let firstLine = originalRawLine;
 		if (dateStamp) {
 			firstLine = `${firstLine} ${dateStamp}`;
