@@ -72,7 +72,7 @@ Off by default. Turn on "Add completion date" to append a timestamp to a card th
 
 Already have checked cards scattered around your vault from before this plugin existed? Turning the automatic toggle on will **not** sweep through and move them all right away. Only boards you actually touch afterward get processed. When you're ready to bring your whole vault up to date deliberately, run **Kanban Complete Mover: Scan vault now** from the command palette. It processes every board at once and reports how many cards moved, restored, or unchecked.
 
-<!-- SCREENSHOT: scan-vault-now-notice. The command palette with "Scan vault now" highlighted, or the resulting Notice popup showing the summary counts. -->
+![The command palette showing the plugin's three commands, with Scan vault now highlighted](media/scan-vault-now-notice.png)
 
 Would rather adopt one board at a time and check the result before moving to the next? Open that board and run **Kanban Complete Mover: Scan this board** instead. Same idea, just scoped to whichever board is currently active. A board you've excluded stays untouched either way, running this command on one just tells you it's excluded rather than scanning it.
 
