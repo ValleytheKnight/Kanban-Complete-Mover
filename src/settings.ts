@@ -6,6 +6,7 @@ export type TimeOption = 'none' | 'hour' | 'minutes' | 'seconds';
 export interface KanbanCompleteMoverSettings {
 	enabled: boolean;
 	targetLaneName: string;
+	restoreOnUncheck: boolean;
 	dateStampEnabled: boolean;
 	datePreset: string;
 	timeOption: TimeOption;
@@ -17,6 +18,7 @@ export interface KanbanCompleteMoverSettings {
 export const DEFAULT_SETTINGS: KanbanCompleteMoverSettings = {
 	enabled: false,
 	targetLaneName: 'Complete',
+	restoreOnUncheck: false,
 	dateStampEnabled: false,
 	datePreset: 'YYYY-MM-DD',
 	timeOption: 'none',
@@ -89,6 +91,20 @@ export class KanbanCompleteMoverSettingTab extends PluginSettingTab {
 					.onChange(async (value) => {
 						this.plugin.settings.targetLaneName =
 							value.trim() || DEFAULT_SETTINGS.targetLaneName;
+						await this.plugin.saveSettings();
+					}),
+			);
+
+		new Setting(containerEl)
+			.setName('Restore on uncheck')
+			.setDesc(
+				'Send a card back to the lane it came from if it gets unchecked while sitting in the complete lane. Only applies to cards this plugin moved after this setting was turned on.',
+			)
+			.addToggle((toggle) =>
+				toggle
+					.setValue(this.plugin.settings.restoreOnUncheck)
+					.onChange(async (value) => {
+						this.plugin.settings.restoreOnUncheck = value;
 						await this.plugin.saveSettings();
 					}),
 			);

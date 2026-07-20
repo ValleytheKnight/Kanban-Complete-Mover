@@ -1,5 +1,5 @@
-import { moment, normalizePath, Plugin, TFile } from 'obsidian';
-import { checkedOutsideLane, moveCheckedCards } from './board';
+import { moment, normalizePath, Notice, Plugin, TFile } from 'obsidian';
+import { checkedOutsideLane, moveCheckedCards, restoreUncheckedCards } from './board';
 import {
 	composeDateStampFormat,
 	DEFAULT_SETTINGS,
@@ -13,6 +13,11 @@ const LANE_OVERRIDE_KEY = 'kanban-complete-lane';
 // A same-tick delay, not a deliberate wait: coalesces multiple modify
 // events that land for one edit without adding any perceived lag.
 const SCAN_DELAY_MS = 0;
+
+interface ProcessResult {
+	moved: number;
+	restored: number;
+}
 
 export default class KanbanCompleteMoverPlugin extends Plugin {
 	settings!: KanbanCompleteMoverSettings;
@@ -48,6 +53,18 @@ export default class KanbanCompleteMoverPlugin extends Plugin {
 				this.lastSeen.delete(file.path);
 			}),
 		);
+
+		this.addCommand({
+			id: 'scan-vault-now',
+			name: 'Scan vault now',
+			callback: () => {
+				void this.scanVault().then(({ files, moved, restored }) => {
+					new Notice(
+						`Kanban Complete Mover: checked ${files} board file(s). Moved ${moved} card(s), restored ${restored} card(s).`,
+					);
+				});
+			},
+		});
 	}
 
 	onunload() {
@@ -108,44 +125,84 @@ export default class KanbanCompleteMoverPlugin extends Plugin {
 		);
 	}
 
-	private async processBoard(file: TFile) {
+	/**
+	 * Run a full-vault sweep on demand, independent of the automatic
+	 * watch-and-move toggle. This is the deliberate, explicit path a user
+	 * takes to adopt the plugin on an existing vault, instead of the effect
+	 * leaking out board by board on whatever unrelated edit touches each
+	 * file next.
+	 */
+	private async scanVault(): Promise<{ files: number; moved: number; restored: number }> {
+		const files = this.app.vault
+			.getMarkdownFiles()
+			.filter((file) => this.isBoard(file) && !this.isExcluded(file));
+
+		let totalMoved = 0;
+		let totalRestored = 0;
+		for (const file of files) {
+			const result = await this.processBoard(file);
+			totalMoved += result?.moved ?? 0;
+			totalRestored += result?.restored ?? 0;
+		}
+		return { files: files.length, moved: totalMoved, restored: totalRestored };
+	}
+
+	private async processBoard(file: TFile): Promise<ProcessResult | null> {
 		if (this.inFlight.has(file.path)) {
 			// Another scan is already writing this file; it will re-scan its
 			// own result when that write lands, so this pass can skip.
-			return;
+			return null;
 		}
 
 		const current = await this.app.vault.cachedRead(file);
 		if (this.lastSeen.get(file.path) === current) {
-			return;
+			return { moved: 0, restored: 0 };
 		}
 
 		const targetLane = this.targetLaneFor(file);
-		const budget = checkedOutsideLane(current, targetLane);
-		if (budget.size === 0) {
-			this.lastSeen.set(file.path, current);
-			return;
-		}
-
 		const dateStamp = this.settings.dateStampEnabled
 			? `✅ ${moment().format(composeDateStampFormat(this.settings))}`
 			: null;
+		const restoreEnabled = this.settings.restoreOnUncheck;
+
+		let moved = 0;
+		let restored = 0;
 
 		this.inFlight.add(file.path);
 		try {
 			const result = await this.app.vault.process(file, (data) => {
-				const move = moveCheckedCards(data, budget, targetLane, dateStamp);
-				return move.content;
+				let working = data;
+
+				const moveBudget = checkedOutsideLane(working, targetLane);
+				if (moveBudget.size > 0) {
+					const move = moveCheckedCards(
+						working,
+						moveBudget,
+						targetLane,
+						dateStamp,
+						restoreEnabled,
+					);
+					working = move.content;
+					moved = move.movedCount;
+				}
+
+				if (restoreEnabled) {
+					const restore = restoreUncheckedCards(working, targetLane);
+					working = restore.content;
+					restored = restore.restoredCount;
+				}
+
+				return working;
 			});
 			this.lastSeen.set(file.path, result);
-			this.refreshBoardViews(file);
+			if (moved > 0 || restored > 0) {
+				this.refreshBoardViews(file);
+			}
 		} finally {
 			this.inFlight.delete(file.path);
 		}
 
-		// The write above triggers another modify event; that rescan is what
-		// catches a checked card the Kanban view re-adds after this pass, so
-		// nothing further is scheduled from here.
+		return { moved, restored };
 	}
 
 	/**
