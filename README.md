@@ -19,9 +19,7 @@ This plugin watches your Kanban boards (the [Kanban plugin](https://github.com/m
 
 1. Open Settings -> Community plugins -> Browse, search for "Kanban Complete Mover," and install it.
 2. Enable the plugin.
-3. Open its settings and turn on "Enable automatic move." It does nothing at all until you do this.
-
-<!-- SCREENSHOT: install-and-enable-toggle. The settings tab with the "Enable automatic move" toggle visible, ideally showing it being switched on. -->
+3. Open its settings and turn on "Enable automatic move."
 
 ## Features
 
