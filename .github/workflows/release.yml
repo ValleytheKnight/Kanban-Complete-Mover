@@ -40,5 +40,5 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           TAG="${{ github.event.inputs.tag || github.ref_name }}"
-          gh release create "$TAG" main.js manifest.json styles.css --title "$TAG" --notes "" \
+          gh release create "$TAG" main.js manifest.json styles.css --title "$TAG" --generate-notes \
             || gh release upload "$TAG" main.js manifest.json styles.css --clobber
