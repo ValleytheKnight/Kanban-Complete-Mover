@@ -122,6 +122,11 @@ Right-click any board in the file explorer and choose **Exclude board from Kanba
 
 Issues and pull requests are welcome. This plugin has no external dependencies and makes no network calls. It reads and writes local Markdown files, nothing else.
 
+## Support
+
+If this plugin is useful to you, you can
+[buy me a coffee](https://www.buymeacoffee.com/valleytheknight).
+
 ## License
 
 MIT
