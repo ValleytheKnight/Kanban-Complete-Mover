@@ -51,6 +51,30 @@ function uncheckLine(line: string): string {
 	return line.replace(/^(\s*- )\[[^\]]*\]/, '$1[ ]');
 }
 
+/**
+ * Recover the pristine pre-move line from a card's own marker instead of
+ * regex-stripping the stamp and marker off the current line. Stripping by
+ * pattern assumed this plugin's own "checkmark + date" stamp was the only
+ * thing that could ever precede the marker, which broke the moment a card
+ * already carried its own unrelated checkmark text, for example the Tasks
+ * plugin's own done-date marker, also a checkmark emoji followed by a
+ * date. Decoding the marker's own recorded original sidesteps the ambiguity
+ * entirely: it's the literal line as it stood the moment this plugin first
+ * moved the card, stamp and marker never included, whatever else the card
+ * carried already, kept. Returns null if the marker can't be decoded, so
+ * the caller can fall back rather than corrupt the line.
+ */
+function recoverOriginalLine(line: string): string | null {
+	const match = line.match(ORIGIN_MARKER);
+	if (!match) return null;
+	const encoded = match[2] ?? '';
+	try {
+		return decodeOriginalLine(encoded);
+	} catch {
+		return null;
+	}
+}
+
 function isSettingsLine(line: string): boolean {
 	return line.startsWith('%% kanban:settings');
 }
@@ -184,8 +208,9 @@ export function uncheckDraggedOutCards(content: string, targetLane: string): Unc
 
 	const lines = content.split('\n');
 	for (const card of candidates) {
-		const original = lines[card.startLine] ?? '';
-		lines[card.startLine] = uncheckLine(original.replace(STAMP_AND_MARKER, ''));
+		const currentLine = lines[card.startLine] ?? '';
+		const recovered = recoverOriginalLine(currentLine);
+		lines[card.startLine] = uncheckLine(recovered ?? currentLine.replace(STAMP_AND_MARKER, ''));
 	}
 	return { content: lines.join('\n'), uncheckedCount: candidates.length };
 }
@@ -213,8 +238,9 @@ export function cleanStaleMarkers(content: string, targetLane: string): UncheckR
 
 	const lines = content.split('\n');
 	for (const card of candidates) {
-		const original = lines[card.startLine] ?? '';
-		lines[card.startLine] = original.replace(STAMP_AND_MARKER, '');
+		const currentLine = lines[card.startLine] ?? '';
+		const recovered = recoverOriginalLine(currentLine);
+		lines[card.startLine] = uncheckLine(recovered ?? currentLine.replace(STAMP_AND_MARKER, ''));
 	}
 	return { content: lines.join('\n'), uncheckedCount: candidates.length };
 }
@@ -247,8 +273,9 @@ export function stripStampInLane(content: string, targetLane: string): UncheckRe
 
 	const lines = content.split('\n');
 	for (const card of candidates) {
-		const original = lines[card.startLine] ?? '';
-		lines[card.startLine] = original.replace(STAMP_AND_MARKER, '');
+		const currentLine = lines[card.startLine] ?? '';
+		const recovered = recoverOriginalLine(currentLine);
+		lines[card.startLine] = uncheckLine(recovered ?? currentLine.replace(STAMP_AND_MARKER, ''));
 	}
 	return { content: lines.join('\n'), uncheckedCount: candidates.length };
 }

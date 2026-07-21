@@ -1,7 +1,7 @@
 {
 	"id": "kanban-complete-mover",
 	"name": "Kanban Complete Mover",
-	"version": "1.0.1",
+	"version": "1.0.2",
 	"minAppVersion": "1.1.0",
 	"description": "Move a Kanban card to your Complete lane the moment its checkbox is checked, with an optional completion-date stamp.",
 	"author": "ValleytheKnight",

@@ -249,7 +249,7 @@ void test('restoreUncheckedCards leaves a card in place, stripped, if its origin
 void test('uncheckDraggedOutCards unchecks and fully cleans a marked card dragged outside the target lane', () => {
 	const content = board([
 		'## Complete',
-		'- [x] Buy groceries ✅ 2026-07-20 <!--kcm-from:Backlog|QnV5IGdyb2Nlcmllcw==-->',
+		'- [x] Buy groceries ✅ 2026-07-20 <!--kcm-from:Backlog|LSBbeF0gQnV5IGdyb2Nlcmllcw==-->',
 		'## Somewhere Else',
 		'',
 	]);
@@ -276,7 +276,7 @@ void test('uncheckDraggedOutCards unchecks and fully cleans a marked card dragge
 void test('cleanStaleMarkers strips leftover stamp and marker from an unchecked card outside the target lane', () => {
 	const content = board([
 		'## Somewhere Else',
-		'- [ ] Buy groceries ✅ 2026-07-20 <!--kcm-from:Backlog|QnV5IGdyb2Nlcmllcw==-->',
+		'- [ ] Buy groceries ✅ 2026-07-20 <!--kcm-from:Backlog|LSBbeF0gQnV5IGdyb2Nlcmllcw==-->',
 	]);
 	const result = cleanStaleMarkers(content, 'Complete');
 	assert.equal(result.uncheckedCount, 1);
@@ -290,7 +290,7 @@ void test('stripStampInLane strips a stale stamp from a card unchecked in place 
 	// was left stuck with a stamp it no longer earned.
 	const content = board([
 		'## Complete',
-		'- [ ] Buy groceries ✅ 2026-07-20 <!--kcm-from:Backlog|QnV5IGdyb2Nlcmllcw==-->',
+		'- [ ] Buy groceries ✅ 2026-07-20 <!--kcm-from:Backlog|LSBbeF0gQnV5IGdyb2Nlcmllcw==-->',
 	]);
 	const result = stripStampInLane(content, 'Complete');
 	assert.equal(result.uncheckedCount, 1);
@@ -299,4 +299,46 @@ void test('stripStampInLane strips a stale stamp from a card unchecked in place 
 	const parsed = parseBoard(result.content);
 	assert.equal(parsed.cards[0]?.laneTitle, 'Complete');
 	assert.equal(parsed.cards[0]?.key, 'Buy groceries');
+});
+
+void test('uncheckDraggedOutCards preserves an unrelated checkmark emoji already on the card (Tasks plugin done-date)', () => {
+	// Regression: this plugin's own stamp also starts with a checkmark
+	// emoji, so a card that already carried its own checkmark text (Tasks
+	// plugin's native done-date marker uses the same emoji) got that text
+	// silently eaten along with our stamp and marker.
+	const content = board([
+		'## Backlog',
+		'- [x] Buy milk 📅 2026-07-01 ✅ 2026-07-15 <!--kcm-from:Backlog|LSBbeF0gQnV5IG1pbGsg8J+ThSAyMDI2LTA3LTAxIOKchSAyMDI2LTA3LTE1-->',
+		'## Complete',
+	]);
+	const result = uncheckDraggedOutCards(content, 'Complete');
+	assert.equal(result.uncheckedCount, 1);
+	assert.ok(!result.content.includes('kcm-from'));
+	assert.ok(result.content.includes('📅 2026-07-01'));
+	assert.ok(result.content.includes('✅ 2026-07-15'));
+	const parsed = parseBoard(result.content);
+	assert.equal(parsed.cards[0]?.checked, false);
+	assert.equal(parsed.cards[0]?.key, 'Buy milk 📅 2026-07-01 ✅ 2026-07-15');
+});
+
+void test('cleanStaleMarkers preserves an unrelated checkmark emoji already on the card (Tasks plugin done-date)', () => {
+	const content = board([
+		'## Backlog',
+		'- [ ] Buy milk ✅ 2026-07-15 <!--kcm-from:Backlog|LSBbeF0gQnV5IG1pbGsg4pyFIDIwMjYtMDctMTU=-->',
+	]);
+	const result = cleanStaleMarkers(content, 'Complete');
+	assert.equal(result.uncheckedCount, 1);
+	assert.ok(!result.content.includes('kcm-from'));
+	assert.ok(result.content.includes('✅ 2026-07-15'));
+});
+
+void test('stripStampInLane preserves an unrelated checkmark emoji already on the card (Tasks plugin done-date)', () => {
+	const content = board([
+		'## Complete',
+		'- [ ] Buy milk ✅ 2026-07-15 <!--kcm-from:Backlog|LSBbeF0gQnV5IG1pbGsg4pyFIDIwMjYtMDctMTU=-->',
+	]);
+	const result = stripStampInLane(content, 'Complete');
+	assert.equal(result.uncheckedCount, 1);
+	assert.ok(!result.content.includes('kcm-from'));
+	assert.ok(result.content.includes('✅ 2026-07-15'));
 });
